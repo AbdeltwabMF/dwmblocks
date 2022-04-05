@@ -1,24 +1,6 @@
 // Copyright 2020 torrinfail
 // Copyright 2022 Abd El-Twab M. Fakhry
 
-/**
-NOTES:
-  - name convention:
-    - all variables are lower case with underscores
-    - all functions are lower case with underscores
-    - all constants are UPPER CASE with underscores
-  - Renamed functions
-    - getsigcmds() -> signal_commands()
-    - getcmds() -> commands()
-    - getcmd() -> command()
-    - sighandler() -> signal_handler()
-    - chldhandler() -> child_handler()
-    - dummysignalhandler() -> dummy_signal_handler()
-    - statusloop() -> status_loop()
-    - termhandler() -> terminate_handler()
-    - writestatus() -> write_status()
-**/
-
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,35 +27,35 @@ NOTES:
 
 typedef struct {
   char *icon;
-  char *command;
+  char *getcmd;
   unsigned int interval;
   unsigned int signal;
 } Block;
 
 #ifndef __OpenBSD__
-void dummy_signal_handler(int num);
+void dummysignalhandler(int num);
 #endif
 
-void exec_commands(int time);
-void signal_commands(unsigned int signal);
-void setup_signals();
-void signal_handler(int signum, siginfo_t *si, void *ucontext);
-void button_handler(int sig, siginfo_t *si, void *ucontext);
-void child_handler();
-int get_status(char *str, char *last);
-void status_loop();
-void terminate_handler();
+void getcmds(int time);
+void getsigcmds(unsigned int signal);
+void setupsignals();
+void sighandler(int signum, siginfo_t *si, void *ucontext);
+void buttonhandler(int sig, siginfo_t *si, void *ucontext);
+void chldhandler();
+int getstatus(char *str, char *last);
+void statusloop();
+void termhandler();
 void pstdout();
 
 #ifndef NO_X
 void setroot();
-static void (*write_status)() = setroot;
+static void (*writestatus)() = setroot;
 static int setupX();
 static Display *dpy;
 static int screen;
 static Window root;
 #else
-static void (*write_status)() = pstdout;
+static void (*writestatus)() = pstdout;
 #endif
 
 #include "blocks.h"
@@ -84,7 +66,7 @@ static char button[] = "\0";
 static int status_continue = 1;
 
 // opens process *cmd and stores output in *output
-void exec_command(const Block *block, char *output) {
+void getcmd(const Block *block, char *output) {
  	if (block->signal)
  		*output++ = block->signal;
 
@@ -97,25 +79,25 @@ void exec_command(const Block *block, char *output) {
      Otherwise, it shall return a null pointer and may set errno
      to indicate the error.
   */
-  FILE *command;
+  FILE *getcmd;
   if (*button) {
   	setenv("BUTTON", button, 1);
-  	command = popen(block->command,"r");
+  	getcmd = popen(block->getcmd,"r");
   	*button = '\0';
   	unsetenv("BUTTON");
   } else {
-  	command = popen(block->command,"r");
+  	getcmd = popen(block->getcmd,"r");
   }
 
-  if (!command)
+  if (!getcmd)
     return;
 
-  fgets(output + icon_size, CMDLENGTH - icon_size - delim_len, command);
+  fgets(output + icon_size, CMDLENGTH - icon_size - delim_len, getcmd);
 
-  // return if the command output is empty
+  // return if the getcmd output is empty
   int output_size = strlen(output);
   if (output_size == strlen(block->icon)) {
-    pclose(command);
+    pclose(getcmd);
     return;
   }
 
@@ -126,33 +108,33 @@ void exec_command(const Block *block, char *output) {
   } else {
     output[last] = '\0';
   }
-  pclose(command);
+  pclose(getcmd);
 }
 
-void exec_commands(int time) {
+void getcmds(int time) {
   const Block *current;
   for (unsigned int i = 0; i < LENGTH(blocks); ++i) {
     current = blocks + i;
     if ((current->interval != 0 && time % current->interval == 0) || time == -1)
-      exec_command(current, status_bar[i]);
+      getcmd(current, status_bar[i]);
   }
 }
 
-void signal_commands(unsigned int signal) {
+void getsigcmds(unsigned int signal) {
   const Block *current;
   for (unsigned int i = 0; i < LENGTH(blocks); ++i) {
     current = blocks + i;
     if (current->signal == signal)
-      exec_command(current, status_bar[i]);
+      getcmd(current, status_bar[i]);
   }
 }
 
-void setup_signals() {
- 	struct sigaction sa = { .sa_sigaction = signal_handler, .sa_flags = SA_SIGINFO };
+void setupsignals() {
+ 	struct sigaction sa = { .sa_sigaction = sighandler, .sa_flags = SA_SIGINFO };
 #ifndef __OpenBSD__
   /* initialize all real time signals with dummy handler */
   for (int i = SIGRTMIN; i <= SIGRTMAX; ++i) {
-    signal(i, dummy_signal_handler);
+    signal(i, dummysignalhandler);
  		sigaddset(&sa.sa_mask, i);
  	}
 #endif
@@ -163,13 +145,13 @@ void setup_signals() {
       // ignore signal when handling SIGUSR1
   		sigaddset(&sa.sa_mask, SIGRTMIN+blocks[i].signal);
   	}
-    sa.sa_sigaction = button_handler;
+    sa.sa_sigaction = buttonhandler;
     sa.sa_flags = SA_SIGINFO;
     sigaction(SIGUSR1, &sa, NULL);
   }
 }
 
-int get_status(char *str, char *last) {
+int getstatus(char *str, char *last) {
   strcpy(last, str);
   str[0] = '\0';
   for (unsigned int i = 0; i < LENGTH(blocks); ++i)
@@ -180,7 +162,7 @@ int get_status(char *str, char *last) {
 
 #ifndef NO_X
 void setroot() {
-  if (!get_status(status_str[0], status_str[1]))
+  if (!getstatus(status_str[0], status_str[1]))
     return;
   XStoreName(dpy, root, status_str[0]);
   XFlush(dpy);
@@ -200,19 +182,19 @@ int setupX() {
 
 void pstdout() {
   // Only write out if text has changed.
-  if (!get_status(status_str[0], status_str[1]))
+  if (!getstatus(status_str[0], status_str[1]))
     return;
   printf("%s\n", status_str[0]);
   fflush(stdout);
 }
 
-void status_loop() {
-  setup_signals();
+void statusloop() {
+  setupsignals();
   int i = 0;
-  exec_commands(-1);
+  getcmds(-1);
   while (1) {
-    exec_commands(i++);
-    write_status();
+    getcmds(i++);
+    writestatus();
     if (!status_continue)
       break;
     sleep(1.0);
@@ -221,16 +203,16 @@ void status_loop() {
 
 #ifndef __OpenBSD__
 /* this signal handler should do nothing */
-void dummy_signal_handler(int signum) { return; }
+void dummysignalhandler(int signum) { return; }
 
-void button_handler(int sig, siginfo_t *si, void *ucontext) {
+void buttonhandler(int sig, siginfo_t *si, void *ucontext) {
   *button = ('0' + si->si_value.sival_int) & 0xff;
-  signal_commands(si->si_value.sival_int >> 8);
-  write_status();
+  getsigcmds(si->si_value.sival_int >> 8);
+  writestatus();
 }
 #endif
 
-void signal_handler(int signum, siginfo_t *si, void *ucontext) {
+void sighandler(int signum, siginfo_t *si, void *ucontext) {
   if (si->si_value.sival_int) {
     pid_t parent = getpid();
     if (fork() == 0) {
@@ -242,7 +224,7 @@ void signal_handler(int signum, siginfo_t *si, void *ucontext) {
       for (i = 0; i < LENGTH(blocks) && blocks[i].signal != signum-SIGRTMIN; i++);
 
       char shcmd[1024];
-      sprintf(shcmd, "%s; kill -%d %d", blocks[i].command, SIGRTMIN+blocks[i].signal, parent);
+      sprintf(shcmd, "%s; kill -%d %d", blocks[i].getcmd, SIGRTMIN+blocks[i].signal, parent);
       char *cmd[] = { "/bin/sh", "-c", shcmd, NULL };
       char button[2] = { '0' + si->si_value.sival_int, '\0' };
       setenv("BUTTON", button, 1);
@@ -252,14 +234,14 @@ void signal_handler(int signum, siginfo_t *si, void *ucontext) {
       exit(EXIT_SUCCESS);
     }
 	} else {
-		signal_commands(signum-SIGPLUS);
-		write_status();
+		getsigcmds(signum-SIGPLUS);
+		writestatus();
 	}
 }
 
-void terminate_handler() { status_continue = 0; }
+void termhandler() { status_continue = 0; }
 
-void child_handler() { while (0 < waitpid(-1, NULL, WNOHANG)); }
+void chldhandler() { while (0 < waitpid(-1, NULL, WNOHANG)); }
 
 
 int main(int argc, char **argv) {
@@ -267,7 +249,7 @@ int main(int argc, char **argv) {
     if (!strcmp("-d", argv[i]))
       strncpy(delim, argv[++i], delim_len);
     else if (!strcmp("-p", argv[i]))
-      write_status = pstdout;
+      writestatus = pstdout;
   }
 
 #ifndef NO_X
@@ -277,10 +259,10 @@ int main(int argc, char **argv) {
 
   delim_len = MIN(delim_len, strlen(delim));
   delim[delim_len++] = '\0';
-  signal(SIGTERM, terminate_handler);
-  signal(SIGINT, terminate_handler);
-	signal(SIGCHLD, child_handler);
-  status_loop();
+  signal(SIGTERM, termhandler);
+  signal(SIGINT, termhandler);
+	signal(SIGCHLD, chldhandler);
+  statusloop();
 
 #ifndef NO_X
   XCloseDisplay(dpy);
