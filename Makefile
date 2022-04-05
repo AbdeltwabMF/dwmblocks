@@ -3,34 +3,28 @@ CC      := cc
 CFLAGS  := -pedantic -Wall -Wno-deprecated-declarations -Os
 LDFLAGS := -lX11
 
+TARGET := dwmblocks
+SOURCE := *.c
+
 # FreeBSD (uncomment)
 #LDFLAGS += -L/usr/local/lib -I/usr/local/include
-# # OpenBSD (uncomment)
+# OpenBSD (uncomment)
 #LDFLAGS += -L/usr/X11R6/lib -I/usr/X11R6/include
 
-all: options dwmblocks
+all: $(TARGET)
 
-options:
-	@echo dwmblocks build options:
-	@echo "CFLAGS  = ${CFLAGS}"
-	@echo "LDFLAGS = ${LDFLAGS}"
-	@echo "CC      = ${CC}"
-
-dwmblocks: dwmblocks.c blocks.def.h blocks.h
-	${CC} -o dwmblocks dwmblocks.c ${CFLAGS} ${LDFLAGS}
-
-blocks.h:
-	cp blocks.def.h $@
+$(TARGET): $(SOURCE)
+	${CC} ${CFLAGS} ${LDFLAGS} $(SOURCE) -o $(TARGET)
 
 clean:
-	rm -f *.o *.gch dwmblocks
+	rm -f *.o *.gch $(TARGET)
 
-install: dwmblocks
+install: $(TARGET)
 	mkdir -p ${DESTDIR}${PREFIX}/bin
-	cp -f dwmblocks ${DESTDIR}${PREFIX}/bin
-	chmod 755 ${DESTDIR}${PREFIX}/bin/dwmblocks
+	cp -f $(TARGET) ${DESTDIR}${PREFIX}/bin
+	chmod 755 ${DESTDIR}${PREFIX}/bin/$(TARGET)
 
 uninstall:
-	rm -f ${DESTDIR}${PREFIX}/bin/dwmblocks
+	rm -f ${DESTDIR}${PREFIX}/bin/$(TARGET)
 
-.PHONY: all options clean install uninstall
+.PHONY: all clean install uninstall
