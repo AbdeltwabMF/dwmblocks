@@ -63,11 +63,14 @@ static int status_continue = 1;
 
 // opens process *cmd and stores output in *output
 void getcmd(const Block *block, char *output) {
+  char *tmp = malloc(CMDLENGTH);
+
 	if (block->signal)
 		*output++ = block->signal;
+
   // copy icon to output
   int icon_size = strlen(block->icon);
-  strcpy(output, block->icon);
+  strcpy(tmp, block->icon);
 
   /* Upon successful completion, popen() shall return a pointer to an
      open stream that can be used to read or write to the pipe.
@@ -87,14 +90,15 @@ void getcmd(const Block *block, char *output) {
   if (!commandf)
     return;
 
-  fgets(output + icon_size, CMDLENGTH - icon_size - delim_len, commandf);
+  fgets(tmp + icon_size, CMDLENGTH - icon_size - delim_len, commandf);
 
   // return if the getcmd output is empty
-  int output_size = strlen(output);
+  int output_size = strlen(tmp);
   if (output_size == 0) {
     pclose(commandf);
     return;
   }
+  strcpy(output, tmp);
 
   // only chop off newline if one is present at the end
   int last = output[output_size - 1] == '\n' ? output_size - 1 : output_size;
