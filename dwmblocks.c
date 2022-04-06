@@ -4,14 +4,12 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/wait.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <sys/wait.h>
 #ifndef NO_X
 #include <X11/Xlib.h>
 #endif
-
 #ifdef __OpenBSD__
 #define SIGPLUS SIGUSR1 + 1
 #define SIGMINUS SIGUSR1 - 1
@@ -27,7 +25,7 @@
 
 typedef struct {
   char *icon;
-  char *getcmd;
+  char *command;
   unsigned int interval;
   unsigned int signal;
 } Block;
@@ -35,18 +33,16 @@ typedef struct {
 #ifndef __OpenBSD__
 void dummysignalhandler(int num);
 #endif
-
+void sighandler(int signum, siginfo_t *si, void *ucontext);
+void buttonhandler(int sig, siginfo_t *si, void *ucontext);
 void getcmds(int time);
 void getsigcmds(unsigned int signal);
 void setupsignals();
-void sighandler(int signum, siginfo_t *si, void *ucontext);
-void buttonhandler(int sig, siginfo_t *si, void *ucontext);
 void chldhandler();
-int getstatus(char *str, char *last);
 void statusloop();
 void termhandler();
 void pstdout();
-
+int getstatus(char *str, char *last);
 #ifndef NO_X
 void setroot();
 static void (*writestatus)() = setroot;
@@ -67,9 +63,8 @@ static int status_continue = 1;
 
 // opens process *cmd and stores output in *output
 void getcmd(const Block *block, char *output) {
- 	if (block->signal)
- 		*output++ = block->signal;
-
+	if (block->signal)
+		*output++ = block->signal;
   // copy icon to output
   int icon_size = strlen(block->icon);
   strcpy(output, block->icon);
@@ -79,25 +74,25 @@ void getcmd(const Block *block, char *output) {
      Otherwise, it shall return a null pointer and may set errno
      to indicate the error.
   */
-  FILE *getcmd;
+  FILE *commandf;
   if (*button) {
-  	setenv("BUTTON", button, 1);
-  	getcmd = popen(block->getcmd,"r");
-  	*button = '\0';
-  	unsetenv("BUTTON");
+    setenv("BUTTON", button, 1);
+    commandf = popen(block->command, "r");
+    *button = '\0';
+    unsetenv("BUTTON");
   } else {
-  	getcmd = popen(block->getcmd,"r");
+    commandf = popen(block->command, "r");
   }
 
-  if (!getcmd)
+  if (!commandf)
     return;
 
-  fgets(output + icon_size, CMDLENGTH - icon_size - delim_len, getcmd);
+  fgets(output + icon_size, CMDLENGTH - icon_size - delim_len, commandf);
 
   // return if the getcmd output is empty
   int output_size = strlen(output);
-  if (output_size == strlen(block->icon)) {
-    pclose(getcmd);
+  if (output_size == 0) {
+    pclose(commandf);
     return;
   }
 
@@ -108,7 +103,7 @@ void getcmd(const Block *block, char *output) {
   } else {
     output[last] = '\0';
   }
-  pclose(getcmd);
+  pclose(commandf);
 }
 
 void getcmds(int time) {
@@ -130,24 +125,18 @@ void getsigcmds(unsigned int signal) {
 }
 
 void setupsignals() {
- 	struct sigaction sa = { .sa_sigaction = sighandler, .sa_flags = SA_SIGINFO };
+	struct sigaction sa = { .sa_sigaction = sighandler, .sa_flags = SA_SIGINFO };
 #ifndef __OpenBSD__
   /* initialize all real time signals with dummy handler */
   for (int i = SIGRTMIN; i <= SIGRTMAX; ++i) {
     signal(i, dummysignalhandler);
- 		sigaddset(&sa.sa_mask, i);
- 	}
+		sigaddset(&sa.sa_mask, i);
+	}
 #endif
 
   for (unsigned int i = 0; i < LENGTH(blocks); ++i) {
-    if (blocks[i].signal > 0) {
- 			sigaction(SIGMINUS + blocks[i].signal, &sa, NULL);
-      // ignore signal when handling SIGUSR1
-  		sigaddset(&sa.sa_mask, SIGRTMIN+blocks[i].signal);
-  	}
-    sa.sa_sigaction = buttonhandler;
-    sa.sa_flags = SA_SIGINFO;
-    sigaction(SIGUSR1, &sa, NULL);
+    if (blocks[i].signal > 0)
+			sigaction(SIGMINUS+blocks[i].signal, &sa, NULL);
   }
 }
 
@@ -157,7 +146,7 @@ int getstatus(char *str, char *last) {
   for (unsigned int i = 0; i < LENGTH(blocks); ++i)
     strcat(str, status_bar[i]);
   str[strlen(str) - strlen(delim)] = '\0';
-  return strcmp(str, last);  // 0 if they are the same
+  return strcmp(str, last); // 0 if they are the same
 }
 
 #ifndef NO_X
@@ -213,26 +202,26 @@ void buttonhandler(int sig, siginfo_t *si, void *ucontext) {
 #endif
 
 void sighandler(int signum, siginfo_t *si, void *ucontext) {
-  if (si->si_value.sival_int) {
-    pid_t parent = getpid();
-    if (fork() == 0) {
+	if (si->si_value.sival_int) {
+		pid_t parent = getpid();
+		if (fork() == 0) {
 #ifndef NO_X
-      if (dpy)
-        close(ConnectionNumber(dpy));
+			if (dpy)
+				close(ConnectionNumber(dpy));
 #endif
-      int i;
-      for (i = 0; i < LENGTH(blocks) && blocks[i].signal != signum-SIGRTMIN; i++);
+			int i;
+			for (i = 0; i < LENGTH(blocks) && blocks[i].signal != signum-SIGRTMIN; i++);
 
-      char shcmd[1024];
-      sprintf(shcmd, "%s; kill -%d %d", blocks[i].getcmd, SIGRTMIN+blocks[i].signal, parent);
-      char *cmd[] = { "/bin/sh", "-c", shcmd, NULL };
-      char button[2] = { '0' + si->si_value.sival_int, '\0' };
-      setenv("BUTTON", button, 1);
-      setsid();
-      execvp(cmd[0], cmd);
-      perror(cmd[0]);
-      exit(EXIT_SUCCESS);
-    }
+			char shcmd[1024];
+			sprintf(shcmd, "%s; kill -%d %d", blocks[i].command, SIGRTMIN+blocks[i].signal, parent);
+			char *cmd[] = { "/bin/sh", "-c", shcmd, NULL };
+			char button[2] = { '0' + si->si_value.sival_int, '\0' };
+			setenv("BUTTON", button, 1);
+			setsid();
+			execvp(cmd[0], cmd);
+			perror(cmd[0]);
+			exit(EXIT_SUCCESS);
+		}
 	} else {
 		getsigcmds(signum-SIGPLUS);
 		writestatus();
@@ -241,8 +230,10 @@ void sighandler(int signum, siginfo_t *si, void *ucontext) {
 
 void termhandler() { status_continue = 0; }
 
-void chldhandler() { while (0 < waitpid(-1, NULL, WNOHANG)); }
-
+void chldhandler()
+{
+	while (0 < waitpid(-1, NULL, WNOHANG));
+}
 
 int main(int argc, char **argv) {
   for (int i = 0; i < argc; i++) {
