@@ -6,7 +6,8 @@ recompile using the make command.
 **/
 static const Block blocks[] = {
     /*Icon*/ /*Command*/ /*Update Interval*/ /*Update Signal*/
-    {"", "sb-newsfeed", 2, 15},
+    {"", "sb-record", 2, 16},
+    {"", "sb-newsfeed", 180, 15},
     {"", "sb-layout", 0, 14},
     {"🕌 ", "next-prayer --hybrid", 29, 13},
     {"", "sb-mail", 2, 12},
