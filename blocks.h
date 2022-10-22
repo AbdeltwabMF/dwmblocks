@@ -9,7 +9,7 @@ static const Block blocks[] = {
     {"", "sb-record", 2, 16},
     {"", "sb-newsfeed", 180, 15},
     {"", "sb-layout", 0, 14},
-    {"🕌 ", "next-prayer --hybrid", 29, 13},
+    {"", "sb-next-prayer", 29, 13},
     {"", "sb-mail", 2, 12},
     {"", "sb-cpu", 1, 11},
     {"", "sb-memory", 2, 10},
