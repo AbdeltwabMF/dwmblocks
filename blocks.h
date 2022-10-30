@@ -29,7 +29,7 @@ static const Block blocks[] = {
 delimiter.
 **/
 
-static char *delim = " | ";
+static char *delim = "";
 static unsigned int delim_len = 5;
 #endif
 
