@@ -19,7 +19,7 @@ static const Block blocks[] = {
     {"", "sb-volume", 0, 6},
     {"", "sb-brightness", 0, 5},
     {"", "sb-battery", 2, 4},
-    {"", "sb-pacman-updates", 0, 3},
+    {"", "sb-pacman-updates", 5, 3},
     {"", "sb-date", 2, 2},
     {"", "sb-clock", 1, 1},
 };
